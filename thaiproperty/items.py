@@ -13,6 +13,9 @@ class ThaipropertyItem(scrapy.Item):
     url = scrapy.Field()
     sku = scrapy.Field()
     hash = scrapy.Field()
+    # type and category
+    category = scrapy.Field()
+    type = scrapy.Field()
     price_rent = scrapy.Field()
     price_sale = scrapy.Field()
     bedrooms = scrapy.Field()
@@ -30,4 +33,4 @@ class ThaipropertyItem(scrapy.Item):
     gps = scrapy.Field()
     # ad state
     #isPublished = scrapy.Field()
-    isActive = scrapy.Field()
+    isRented = scrapy.Field()

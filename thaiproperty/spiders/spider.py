@@ -8,18 +8,43 @@ from scrapy.exceptions import DropItem
 class ThaipropertySpider(scrapy.Spider):
     #http://www.thaiproperty.com/for_rent/condos.html
     name = 'thaipropertycom_spider'
-    start_urls = ['http://www.thaiproperty.com/']
-    base_url = "http://www.thaiproperty.com/for_rent/condos.html?&per_page="
+    start_urls = ['http://www.thaiproperty.com/for_rent/condos.html?&per_page=',
+                  "http://www.thaiproperty.com/for_rent/houses.html?&per_page=",
+                  "http://www.thaiproperty.com/for_sale/condos.html?&per_page=",
+                  "http://www.thaiproperty.com/for_sale/houses.html?&per_page="]
     data = []
     page_counter = 0
+    max_page = 0
 
     # init
     def parse(self, response):
-        while(self.page_counter <= 1380 ): #1380):
-            url = "%s%s" % (self.base_url, self.page_counter)
-            # switching pages
-            self.page_counter += 20
-            yield scrapy.Request(url, self.parse_pages)
+        for max_page in response.css('p.p-box-paging:nth-child(1) > span:nth-child(3)::text').extract():
+            try:
+                page = max_page.replace(',', '')
+                try:
+                    page = re.findall('(\d+)', page)[::-1][0]
+                    self.max_page = int(page)
+                except BaseException:
+                    print("Can't get max_page: something broken")
+            except TypeError:
+                print("Can't convert max_page value to int")
+        # debug
+        print()
+        print self.max_page
+        print()
+        #
+        if isinstance(self.max_page, int) and self.max_page > 0 and self.page_counter < self.max_page:
+            while(self.page_counter <= self.max_page):
+                url = "%s%s" % (response.url, self.page_counter)
+                # switching pages
+                self.page_counter += 20
+                # debug
+                print()
+                print(url)
+                print()
+                # debug
+                yield scrapy.Request(url, self.parse_pages)
+
 
     # get links from category page and make request on each one of it
     def parse_pages(self, response):
@@ -37,8 +62,24 @@ class ThaipropertySpider(scrapy.Spider):
 
         # url
         item['url'] = response.url
+        # caregory
+        if u'/for_rent/' in response.url:
+            item['category'] = 'for_rent'
+        elif u'/for_sale/' in response.url:
+            item['category'] = 'for_sale'
+        # type
+        if u"/condos.html" in response.url:
+            item['type'] = 'condominimum'
+        if u"/houses.html" in response.url:
+            item['type'] = 'house'
+        # hash
         item['hash'] = md5(response.url).hexdigest()
-        item['isActive'] = True
+
+        # isRented
+        item['isRented'] = False
+        for rented in response.css('.rentedunti::text').extract():
+            if u'Rented Until' in rented:
+                item['isRented'] = True
 
         # title
         for title in response.css("#content > h2::text").extract():
@@ -80,7 +121,6 @@ class ThaipropertySpider(scrapy.Spider):
             bedrooms_count = bedrooms.replace('Bedrooms : ', '')
             if u'studio' in bedrooms_count.lower():
                 bedrooms_count = '1'
-
             item['bedrooms'] = bedrooms_count
 
         # bathrooms
