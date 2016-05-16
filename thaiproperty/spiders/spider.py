@@ -2,27 +2,27 @@
 # made by megusta
 # sample spider for thaiproperty.com
 # TODO: add watermark replacement using PIL
-import scrapy
-import re
+from scrapy import Spider, Request
+from re import findall
 from thaiproperty.items import ThaipropertyItem
 from hashlib import md5
 from scrapy.exceptions import DropItem
 
-class ThaipropertySpider(scrapy.Spider):
-    name = 'thaipropertycom_spider'
-    start_urls = ['http://www.thaiproperty.com']
-    data = []
+class ThaipropertySpider(Spider):
+    name = "thaipropertycom_spider"
+    start_urls = ["http://www.thaiproperty.com"]
     page_counter = 0
     max_page = 0
-    site_sections = ['http://www.thaiproperty.com/for_rent/condos.html?&per_page=',
-                  "http://www.thaiproperty.com/for_rent/houses.html?&per_page=",
-                  "http://www.thaiproperty.com/for_sale/condos.html?&per_page=",
-                  "http://www.thaiproperty.com/for_sale/houses.html?&per_page="]
+    site_sections = [
+        "http://www.thaiproperty.com/for_rent/condos.html?&per_page=",
+        "http://www.thaiproperty.com/for_rent/houses.html?&per_page=",
+        "http://www.thaiproperty.com/for_sale/condos.html?&per_page=",
+        "http://www.thaiproperty.com/for_sale/houses.html?&per_page="]
 
     # __init__()
     def parse(self, response):
         for page in self.site_sections:
-            yield scrapy.Request(page, self.parse_section)
+            yield Request(page, self.parse_section)
 
     # go onto section page(i.e. condos for sale) and then iterate sections and work on each section going deeper
     # from sections to caregory page and then to the detail ad page
@@ -31,7 +31,7 @@ class ThaipropertySpider(scrapy.Spider):
             try:
                 page = max_page.replace(',', '')
                 try:
-                    page = re.findall('(\d+)', page)[::-1][0]
+                    page = findall('(\d+)', page)[::-1][0]
                     self.max_page = int(page)
                 except BaseException:
                     print("Can't get max_page: something broken")
@@ -42,35 +42,42 @@ class ThaipropertySpider(scrapy.Spider):
                 url = "%s%s" % (response.url, self.page_counter)
                 # switching pages
                 self.page_counter += 20
-                yield scrapy.Request(url, self.parse_pages)
+                yield Request(url, self.parse_pages)
 
 
     # get links from category page and make request on each one of it
     def parse_pages(self, response):
         for href in response.css('.subBoxDetailList > a::attr("href")'):
             full_url = response.urljoin(href.extract())
-            yield scrapy.Request(full_url, self.parse_ad)
+            yield Request(full_url, self.parse_ad)
 
     # scrap the detail ad page
     def parse_ad(self, response):
         file_urls = []
         features = []
         items = {}
-        # create Item object
+        # create Item object and fill it down
         item = ThaipropertyItem()
 
         # url
         item['url'] = response.url
-        # caregory
+
+        # category
         if u'/for_rent/' in response.url:
             item['category'] = 'for_rent'
         elif u'/for_sale/' in response.url:
             item['category'] = 'for_sale'
+        else:
+            item['category'] = False
+
         # type
-        if u"/condos.html" in response.url:
+        if u"/condos.html" in response.url or u"/condos/" in response.url:
             item['type'] = 'condominimum'
-        if u"/houses.html" in response.url:
+        elif u"/houses.html" in response.url or u"/houses/" in response.url:
             item['type'] = 'house'
+        else:
+            item['type'] = False
+
         # hash
         item['hash'] = md5(response.url).hexdigest()
 
@@ -95,18 +102,18 @@ class ThaipropertySpider(scrapy.Spider):
                     print("Can't split sku!")
             item['sku'] = result.strip()
 
-
         # floor
         for floor in response.css(".boxRightContent > div> ul > li:contains('Floor : ')::text").extract():
             item['floor'] = floor.replace('Floor : ', '')
 
+        # all prices are in Thai Baht(b), but you can scrap prices in USD or RUR for example
         # rent price by month
         for month_rent_price in response.css("span#boxpriceShow2::text").extract():
-            item['price_rent'] = month_rent_price.replace(u'\u0e3f', '').replace(' /m', '') # replace baht currency sign
+            item['price_rent'] = month_rent_price.replace(u'\u0e3f', '').replace(' /m', '').replace(',', '') # replace baht currency sign
 
         # sale price by month
         for sale_price in response.css("#boxpriceShow::text").extract():
-            item['price_sale'] = sale_price.replace(u'\u0e3f', '') # replace baht currency sign
+            item['price_sale'] = sale_price.replace(u'\u0e3f', '').replace(',', '') # replace baht currency sign
 
         # area
         for area in response.css(".boxRightContent > div> ul > li:contains('Living area : ')::text").extract():
@@ -135,7 +142,7 @@ class ThaipropertySpider(scrapy.Spider):
             item['description'] = description.strip()
 
         # coordinates gps
-        gps = re.findall("((\d+){1,3}\.(\d+?){15})", response.body)
+        gps = findall("((\d+){1,3}\.(\d+?){15})", response.body)
         if gps and isinstance(gps, list):
             try:
                 item['gps'] = {
@@ -173,7 +180,7 @@ class ThaipropertySpider(scrapy.Spider):
     def get_media_requests(self, item, info):
         item['file_urls'] = []
         for url in item['file_urls']:
-            yield scrapy.Request(url)
+            yield Request(url)
 
     # define item path after item download
     def item_completed(self, results, item, info):
