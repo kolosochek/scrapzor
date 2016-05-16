@@ -1,4 +1,7 @@
-#made by megusta
+# -*- coding: utf-8 -*-
+# made by megusta
+# sample spider for thaiproperty.com
+# TODO: add watermark replacement using PIL
 import scrapy
 import re
 from thaiproperty.items import ThaipropertyItem
@@ -6,18 +9,24 @@ from hashlib import md5
 from scrapy.exceptions import DropItem
 
 class ThaipropertySpider(scrapy.Spider):
-    #http://www.thaiproperty.com/for_rent/condos.html
     name = 'thaipropertycom_spider'
-    start_urls = ['http://www.thaiproperty.com/for_rent/condos.html?&per_page=',
-                  "http://www.thaiproperty.com/for_rent/houses.html?&per_page=",
-                  "http://www.thaiproperty.com/for_sale/condos.html?&per_page=",
-                  "http://www.thaiproperty.com/for_sale/houses.html?&per_page="]
+    start_urls = ['http://www.thaiproperty.com']
     data = []
     page_counter = 0
     max_page = 0
+    site_sections = ['http://www.thaiproperty.com/for_rent/condos.html?&per_page=',
+                  "http://www.thaiproperty.com/for_rent/houses.html?&per_page=",
+                  "http://www.thaiproperty.com/for_sale/condos.html?&per_page=",
+                  "http://www.thaiproperty.com/for_sale/houses.html?&per_page="]
 
-    # init
+    # __init__()
     def parse(self, response):
+        for page in self.site_sections:
+            yield scrapy.Request(page, self.parse_section)
+
+    # go onto section page(i.e. condos for sale) and then iterate sections and work on each section going deeper
+    # from sections to caregory page and then to the detail ad page
+    def parse_section(self, response):
         for max_page in response.css('p.p-box-paging:nth-child(1) > span:nth-child(3)::text').extract():
             try:
                 page = max_page.replace(',', '')
@@ -28,21 +37,11 @@ class ThaipropertySpider(scrapy.Spider):
                     print("Can't get max_page: something broken")
             except TypeError:
                 print("Can't convert max_page value to int")
-        # debug
-        print()
-        print self.max_page
-        print()
-        #
         if isinstance(self.max_page, int) and self.max_page > 0 and self.page_counter < self.max_page:
             while(self.page_counter <= self.max_page):
                 url = "%s%s" % (response.url, self.page_counter)
                 # switching pages
                 self.page_counter += 20
-                # debug
-                print()
-                print(url)
-                print()
-                # debug
                 yield scrapy.Request(url, self.parse_pages)
 
 
@@ -172,6 +171,7 @@ class ThaipropertySpider(scrapy.Spider):
 
     # enable custom file pipeline
     def get_media_requests(self, item, info):
+        item['file_urls'] = []
         for url in item['file_urls']:
             yield scrapy.Request(url)
 
