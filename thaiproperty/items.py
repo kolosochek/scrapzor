@@ -26,5 +26,5 @@ class ThaipropertyItem(Item):
     location = Field()
     gps = Field()
     # ad state
-    #isPublished = Field()
     isRented = Field()
+    #isPublished = Field()

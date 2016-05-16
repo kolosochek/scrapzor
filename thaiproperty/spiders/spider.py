@@ -3,7 +3,7 @@
 # sample spider for thaiproperty.com
 # TODO: add watermark replacement using PIL
 from scrapy import Spider, Request
-from re import findall
+from re import findall, sub
 from thaiproperty.items import ThaipropertyItem
 from hashlib import md5
 from scrapy.exceptions import DropItem
@@ -120,26 +120,28 @@ class ThaipropertySpider(Spider):
             square = area.replace('Living area : ', '')
             if "sqm." in square:
                 square = square.replace('sqm.', '')
-            item['area'] = square
+            item['area'] = square.strip()
 
         # bedrooms
         for bedrooms in response.css(".boxRightContent > div> ul > li:contains('Bedrooms : ')::text").extract():
             bedrooms_count = bedrooms.replace('Bedrooms : ', '')
             if u'studio' in bedrooms_count.lower():
                 bedrooms_count = '1'
-            item['bedrooms'] = bedrooms_count
+            item['bedrooms'] = bedrooms_count.strip()
 
         # bathrooms
         for bathrooms in response.css(".boxRightContent > div> ul > li:contains('Bathrooms : ')::text").extract():
-            item['bathrooms'] = bathrooms.replace('Bathrooms : ', '')
+            item['bathrooms'] = bathrooms.replace('Bathrooms : ', '').strip()
 
         # location
         for location in response.css(".boxRightContent > div> ul > li:contains('Location : ')::text").extract():
-            item['location'] = location.replace('Location : ', '')
+            item['location'] = location.replace('Location : ', '').strip()
 
         # description
-        for description in response.css('#tabs .descriptionunit > p::text').extract():
-            item['description'] = description.strip()
+        full_description = ""
+        for description in response.css('#tabs .descriptionunit > p').extract():
+            full_description += description.strip()
+        item['description'] = sub(r"<[^>]*?>", "", full_description)
 
         # coordinates gps
         gps = findall("((\d+){1,3}\.(\d+?){15})", response.body)
